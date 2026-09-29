@@ -1,0 +1,673 @@
+{
+  "name": "lessone-7day API",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:3000",
+  "globalPrefix": "/api/v1",
+  "documentation": {
+    "swaggerUI": "http://localhost:3000/docs",
+    "openApiJson": "http://localhost:3000/docs-json",
+    "note": "The machine-readable OpenAPI 3 spec is also saved at ./api-spec.json and is generated live by the running server."
+  },
+  "conventions": {
+    "authScheme": "Bearer JWT in the `Authorization` header, except for /health, /api/v1/health/info, /api/v1/auth/register and /api/v1/auth/login.",
+    "responseEnvelope": "Every successful response except GET /health is wrapped by TransformInterceptor as { success, data, meta?, timestamp, path }. GET /health is raw.",
+    "validation": "ValidationPipe runs with whitelist + forbidNonWhitelisted, so any unknown property in a JSON body is rejected with 400.",
+    "idFormat": "All :id path params are UUID v4 and are enforced by ParseUUIDPipe.",
+    "errorFormat": "HttpExceptionFilter maps thrown errors to { success: false, statusCode, message, error, path, timestamp }.",
+    "softDelete": "Tasks use a DeleteDateColumn: DELETE sets deletedAt and the row is hidden from queries but retained.",
+    "envFile": "JWT_SECRET and DB_* come from .env; the app refuses to boot without them."
+  },
+  "enums": {
+    "TaskStatus": ["TODO", "IN_PROGRESS", "DONE", "ARCHIVED"],
+    "TaskPriority": ["LOW", "MEDIUM", "HIGH", "URGENT"],
+    "Role": ["ADMIN", "USER"]
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "auth": "none",
+      "adminOnly": false,
+      "summary": "Liveness probe",
+      "description": "Excluded from the /api/v1 prefix so orchestrators can probe it without knowing the API version. Returns a raw payload, not the standard envelope.",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "raw": true,
+          "example": {
+            "status": "ok",
+            "uptime": 25.629901,
+            "timestamp": "2026-09-29T02:16:42.761Z"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/info",
+      "auth": "none",
+      "adminOnly": false,
+      "summary": "Service metadata",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "example": {
+            "success": true,
+            "data": { "name": "lessone-7day API", "version": "1.0.0" },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/health/info"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "auth": "none",
+      "adminOnly": false,
+      "summary": "Register a new account and receive an access token",
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": { "$ref": "#/components/schemas/RegisterDto" },
+        "example": {
+          "email": "ada@example.com",
+          "password": "Str0ng-Passphrase!"
+        }
+      },
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "201": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/AuthTokensDto" },
+          "example": {
+            "success": true,
+            "data": {
+              "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+              "tokenType": "Bearer",
+              "expiresIn": "1h",
+              "user": {
+                "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+                "email": "ada@example.com",
+                "role": "USER"
+              }
+            },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/auth/register"
+          }
+        },
+        "400": { "description": "Validation failed, or the password does not meet the complexity rules." },
+        "409": { "description": "That email is already registered." }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "auth": "none",
+      "adminOnly": false,
+      "summary": "Exchange credentials for an access token",
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": { "$ref": "#/components/schemas/LoginDto" },
+        "example": { "email": "ada@example.com", "password": "Str0ng-Passphrase!" }
+      },
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/AuthTokensDto" },
+          "example": {
+            "success": true,
+            "data": {
+              "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+              "tokenType": "Bearer",
+              "expiresIn": "1h",
+              "user": {
+                "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+                "email": "ada@example.com",
+                "role": "USER"
+              }
+            },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/auth/login"
+          }
+        },
+        "400": { "description": "Validation failed." },
+        "401": { "description": "Invalid credentials, or a deactivated account." }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "auth": "bearer",
+      "adminOnly": false,
+      "summary": "Return the profile bound to the current token",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/UserProfileDto" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "email": "ada@example.com",
+              "role": "USER"
+            },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/auth/me"
+          }
+        },
+        "401": { "description": "Missing or invalid access token." }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "auth": "bearer",
+      "adminOnly": false,
+      "summary": "List tasks",
+      "description": "Non-admins only ever see their own tasks; admins see every task. Supports filtering, search, sorting and pagination.",
+      "requestBody": null,
+      "queryParams": [
+        { "name": "page", "type": "integer", "required": false, "default": 1, "min": 1 },
+        { "name": "limit", "type": "integer", "required": false, "default": 20, "min": 1, "max": 100 },
+        { "name": "status", "type": "TaskStatus", "required": false, "enum": ["TODO", "IN_PROGRESS", "DONE", "ARCHIVED"] },
+        { "name": "priority", "type": "TaskPriority", "required": false, "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"] },
+        { "name": "search", "type": "string", "required": false, "maxLength": 200, "description": "Free-text match against title/description." },
+        { "name": "sortBy", "type": "string", "required": false, "default": "createdAt", "enum": ["createdAt", "dueDate", "priority"] },
+        { "name": "order", "type": "string", "required": false, "default": "DESC", "enum": ["ASC", "DESC"] }
+      ],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "paginated": true,
+          "dataSchema": { "type": "array", "items": { "$ref": "#/components/schemas/Task" } },
+          "example": {
+            "success": true,
+            "data": [
+              {
+                "id": "2b8e4d1a-9c3f-4e5b-8a7d-1f2e3c4d5b6a",
+                "title": "Ship the release notes",
+                "description": "Draft the changelog for v1.0.0",
+                "status": "IN_PROGRESS",
+                "priority": "HIGH",
+                "dueDate": "2026-10-01T09:00:00.000Z",
+                "isCompleted": false,
+                "ownerId": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+                "createdAt": "2026-09-29T02:16:42.761Z",
+                "updatedAt": "2026-09-29T02:16:42.761Z",
+                "deletedAt": null
+              }
+            ],
+            "meta": { "total": 42, "page": 1, "limit": 20, "totalPages": 3 },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/tasks"
+          }
+        },
+        "401": { "description": "Missing or invalid access token." }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks",
+      "auth": "bearer",
+      "adminOnly": false,
+      "summary": "Create a task owned by the caller",
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": { "$ref": "#/components/schemas/CreateTaskDto" },
+        "example": {
+          "title": "Ship the release notes",
+          "description": "Draft the changelog for v1.0.0",
+          "status": "TODO",
+          "priority": "HIGH",
+          "dueDate": "2026-10-01T09:00:00.000Z"
+        }
+      },
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "201": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/Task" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "2b8e4d1a-9c3f-4e5b-8a7d-1f2e3c4d5b6a",
+              "title": "Ship the release notes",
+              "description": "Draft the changelog for v1.0.0",
+              "status": "TODO",
+              "priority": "HIGH",
+              "dueDate": "2026-10-01T09:00:00.000Z",
+              "isCompleted": false,
+              "ownerId": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "createdAt": "2026-09-29T02:16:42.761Z",
+              "updatedAt": "2026-09-29T02:16:42.761Z",
+              "deletedAt": null
+            },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/tasks"
+          }
+        },
+        "400": { "description": "Validation failed." },
+        "401": { "description": "Missing or invalid access token." }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/stats/summary",
+      "auth": "bearer",
+      "adminOnly": true,
+      "summary": "Task counts grouped by status (ADMIN only)",
+      "description": "Declared before the ':id' route so 'stats' is not parsed as a UUID.",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "example": {
+            "success": true,
+            "data": { "TODO": 12, "IN_PROGRESS": 5, "DONE": 20, "ARCHIVED": 5 },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/tasks/stats/summary"
+          }
+        },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The caller is not an ADMIN." }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/{id}",
+      "auth": "bearer",
+      "adminOnly": false,
+      "summary": "Fetch a task by id",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/Task" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "2b8e4d1a-9c3f-4e5b-8a7d-1f2e3c4d5b6a",
+              "title": "Ship the release notes",
+              "description": "Draft the changelog for v1.0.0",
+              "status": "IN_PROGRESS",
+              "priority": "HIGH",
+              "dueDate": "2026-10-01T09:00:00.000Z",
+              "isCompleted": false,
+              "ownerId": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "createdAt": "2026-09-29T02:16:42.761Z",
+              "updatedAt": "2026-09-29T02:16:42.761Z",
+              "deletedAt": null
+            },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/tasks/2b8e4d1a-9c3f-4e5b-8a7d-1f2e3c4d5b6a"
+          }
+        },
+        "400": { "description": "The id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The task belongs to another user." },
+        "404": { "description": "No task with that id." }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/tasks/{id}",
+      "auth": "bearer",
+      "adminOnly": false,
+      "summary": "Partially update a task",
+      "description": "Only the supplied fields are changed; every field of CreateTaskDto is optional here.",
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": { "$ref": "#/components/schemas/UpdateTaskDto" },
+        "example": { "status": "DONE", "priority": "URGENT" }
+      },
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/Task" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "2b8e4d1a-9c3f-4e5b-8a7d-1f2e3c4d5b6a",
+              "title": "Ship the release notes",
+              "description": "Draft the changelog for v1.0.0",
+              "status": "DONE",
+              "priority": "URGENT",
+              "dueDate": "2026-10-01T09:00:00.000Z",
+              "isCompleted": true,
+              "ownerId": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "createdAt": "2026-09-29T02:16:42.761Z",
+              "updatedAt": "2026-09-29T02:18:10.004Z",
+              "deletedAt": null
+            },
+            "timestamp": "2026-09-29T02:18:10.004Z",
+            "path": "/api/v1/tasks/2b8e4d1a-9c3f-4e5b-8a7d-1f2e3c4d5b6a"
+          }
+        },
+        "400": { "description": "Validation failed, or the id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The task belongs to another user." },
+        "404": { "description": "No task with that id." }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/tasks/{id}",
+      "auth": "bearer",
+      "adminOnly": false,
+      "summary": "Soft-delete a task",
+      "description": "Sets deletedAt rather than removing the row. Returns 204 with an empty body.",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "204": { "envelope": false, "description": "Task soft-deleted. Empty body." },
+        "400": { "description": "The id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The task belongs to another user." },
+        "404": { "description": "No task with that id." }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "auth": "bearer",
+      "adminOnly": true,
+      "summary": "List users (ADMIN only)",
+      "requestBody": null,
+      "queryParams": [
+        { "name": "page", "type": "integer", "required": false, "default": 1, "min": 1 },
+        { "name": "limit", "type": "integer", "required": false, "default": 20, "min": 1, "max": 100 }
+      ],
+      "pathParams": [],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "paginated": true,
+          "dataSchema": { "type": "array", "items": { "$ref": "#/components/schemas/User" } },
+          "example": {
+            "success": true,
+            "data": [
+              {
+                "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+                "email": "ada@example.com",
+                "role": "ADMIN",
+                "isActive": true,
+                "createdAt": "2026-09-29T02:16:42.761Z",
+                "updatedAt": "2026-09-29T02:16:42.761Z"
+              }
+            ],
+            "meta": { "total": 2, "page": 1, "limit": 20, "totalPages": 1 },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/users"
+          }
+        },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The caller is not an ADMIN." }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/{id}",
+      "auth": "bearer",
+      "adminOnly": true,
+      "summary": "Fetch a single user by id (ADMIN only)",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/User" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "email": "ada@example.com",
+              "role": "ADMIN",
+              "isActive": true,
+              "createdAt": "2026-09-29T02:16:42.761Z",
+              "updatedAt": "2026-09-29T02:16:42.761Z"
+            },
+            "timestamp": "2026-09-29T02:16:42.761Z",
+            "path": "/api/v1/users/6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11"
+          }
+        },
+        "400": { "description": "The id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The caller is not an ADMIN." },
+        "404": { "description": "No user with that id." }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/{id}/role",
+      "auth": "bearer",
+      "adminOnly": true,
+      "summary": "Change a user role (ADMIN only)",
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": { "$ref": "#/components/schemas/UpdateUserRoleDto" },
+        "example": { "role": "ADMIN" }
+      },
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/User" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "email": "ada@example.com",
+              "role": "ADMIN",
+              "isActive": true,
+              "createdAt": "2026-09-29T02:16:42.761Z",
+              "updatedAt": "2026-09-29T02:19:33.221Z"
+            },
+            "timestamp": "2026-09-29T02:19:33.221Z",
+            "path": "/api/v1/users/6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11/role"
+          }
+        },
+        "400": { "description": "Validation failed, or the id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The caller is not an ADMIN." },
+        "404": { "description": "No user with that id." }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/{id}/status",
+      "auth": "bearer",
+      "adminOnly": true,
+      "summary": "Activate or deactivate a user (ADMIN only)",
+      "description": "A deactivated user can no longer log in.",
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": { "$ref": "#/components/schemas/UpdateUserStatusDto" },
+        "example": { "isActive": false }
+      },
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "200": {
+          "envelope": true,
+          "dataSchema": { "$ref": "#/components/schemas/User" },
+          "example": {
+            "success": true,
+            "data": {
+              "id": "6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11",
+              "email": "ada@example.com",
+              "role": "USER",
+              "isActive": false,
+              "createdAt": "2026-09-29T02:16:42.761Z",
+              "updatedAt": "2026-09-29T02:20:01.117Z"
+            },
+            "timestamp": "2026-09-29T02:20:01.117Z",
+            "path": "/api/v1/users/6f1c9a2e-4b3d-4a7f-9c21-8e5b0d3a7f11/status"
+          }
+        },
+        "400": { "description": "Validation failed, or the id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The caller is not an ADMIN." },
+        "404": { "description": "No user with that id." }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/users/{id}",
+      "auth": "bearer",
+      "adminOnly": true,
+      "summary": "Delete a user and cascade their tasks (ADMIN only)",
+      "description": "Hard delete. The task rows are removed by the ON DELETE CASCADE constraint. Returns 204 with an empty body.",
+      "requestBody": null,
+      "queryParams": [],
+      "pathParams": [{ "name": "id", "type": "string", "format": "uuid", "required": true }],
+      "responses": {
+        "204": { "envelope": false, "description": "Deleted. Empty body." },
+        "400": { "description": "The id is not a valid UUID v4." },
+        "401": { "description": "Missing or invalid access token." },
+        "403": { "description": "The caller is not an ADMIN." },
+        "404": { "description": "No user with that id." }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "RegisterDto": {
+        "type": "object",
+        "required": ["email", "password"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 72,
+            "example": "Str0ng-Passphrase!",
+            "description": "Must contain at least one lowercase letter, one uppercase letter, one digit and one symbol. 72 chars is bcrypt's hard limit — anything longer is silently truncated."
+          }
+        }
+      },
+      "LoginDto": {
+        "type": "object",
+        "required": ["email", "password"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+          "password": { "type": "string", "example": "Str0ng-Passphrase!" }
+        }
+      },
+      "AuthTokensDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
+          "tokenType": { "type": "string", "example": "Bearer" },
+          "expiresIn": { "type": "string", "example": "1h" },
+          "user": { "$ref": "#/components/schemas/UserProfileDto" }
+        }
+      },
+      "UserProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+          "role": { "type": "string", "enum": ["ADMIN", "USER"] }
+        }
+      },
+      "CreateTaskDto": {
+        "type": "object",
+        "required": ["title"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string", "maxLength": 200, "example": "Ship the release notes" },
+          "description": {
+            "type": "string",
+            "maxLength": 4000,
+            "nullable": true,
+            "example": "Draft the changelog for v1.0.0",
+            "description": "Trimmed automatically; blank strings become null."
+          },
+          "status": { "type": "string", "enum": ["TODO", "IN_PROGRESS", "DONE", "ARCHIVED"], "default": "TODO" },
+          "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"], "default": "MEDIUM" },
+          "dueDate": { "type": "string", "format": "date-time", "nullable": true, "example": "2026-10-01T09:00:00.000Z" }
+        }
+      },
+      "UpdateTaskDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "PartialType(CreateTaskDto) — every property is optional.",
+        "properties": {
+          "title": { "type": "string", "maxLength": 200 },
+          "description": { "type": "string", "maxLength": 4000, "nullable": true },
+          "status": { "type": "string", "enum": ["TODO", "IN_PROGRESS", "DONE", "ARCHIVED"] },
+          "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"] },
+          "dueDate": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "title": { "type": "string", "maxLength": 200, "example": "Ship the release notes" },
+          "description": { "type": "string", "nullable": true, "example": "Draft the changelog for v1.0.0" },
+          "status": { "type": "string", "enum": ["TODO", "IN_PROGRESS", "DONE", "ARCHIVED"], "default": "TODO" },
+          "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"], "default": "MEDIUM" },
+          "dueDate": { "type": "string", "format": "date-time", "nullable": true },
+          "isCompleted": { "type": "boolean", "default": false },
+          "ownerId": { "type": "string", "format": "uuid" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "deletedAt": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "User": {
+        "type": "object",
+        "description": "The password hash is never serialised: the column is `select: false` and the field is @Exclude().",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "email": { "type": "string", "format": "email", "example": "ada@example.com" },
+          "role": { "type": "string", "enum": ["ADMIN", "USER"], "default": "USER" },
+          "isActive": { "type": "boolean", "default": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "UpdateUserRoleDto": {
+        "type": "object",
+        "required": ["role"],
+        "additionalProperties": false,
+        "properties": {
+          "role": { "type": "string", "enum": ["ADMIN", "USER"] }
+        }
+      },
+      "UpdateUserStatusDto": {
+        "type": "object",
+        "required": ["isActive"],
+        "additionalProperties": false,
+        "properties": {
+          "isActive": { "type": "boolean", "example": false }
+        }
+      }
+    }
+  }
+}
